@@ -6,22 +6,145 @@
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window);
 void showFPS(GLFWwindow *window);
+GLFWwindow *initOpenGL();
 
 // settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 const char *APP_TITLE = "Intro OpenGL: Window 1";
-bool glFullscreen = true;
+bool glFullscreen = false;
 
 // For now, we keep our GLSL (super basic) shader defined in our main.cpp1
-const char *vertexShaderSource = "#version 330 core\n"
-                                 "layout (location = 0) in vec3 aPos;\n"
-                                 "void main()\n"
-                                 "{\n"
-                                 "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-                                 "}\0";
+const GLchar *vertexShaderSource = "#version 330 core\n"
+                                   "layout (location = 0) in vec3 aPos;"
+                                   "void main()"
+                                   "{"
+                                   "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);"
+                                   "}";
+
+const GLchar *fragmentShaderSrc = "#version 330 core\n"
+                                  "out vec4 frag_color;"
+                                  "void main()"
+                                  "{"
+                                  "frag_color = vec4(0.35f, 0.96f, 0.3f, 1.0f);"
+                                  "}";
 
 int main()
+{
+    GLFWwindow *window = initOpenGL();
+    if (window == NULL)
+    {
+        std::cout << "Failed to initialize OpenGL" << std::endl;
+        return -1;
+    }
+
+    // Generally, it's a good idea to use the GL types (even though
+    // they're often typedef'd to the expected C types)
+    GLfloat vertices[] = {
+        0.0f, 0.5f, 0.0f,  // Top
+        0.5f, -0.5f, 0.0f, // Right
+        -0.5, -0.5f, 0.0f, // Left
+    };
+
+    // Normally called a VBO, the vertex buffer object lets us store
+    // a lot of vertices in memory on the graphics card;
+    // It's slow to get data from the CPU -> GPU, so we want to get
+    // as much into the graphics cards at once (batching)
+    GLuint vertex_buffer_object;
+    // Create a new buffer
+    glGenBuffers(1, &vertex_buffer_object);
+    // Bind the newly-created buffer to the GL_ARRAY_BUFFER target;
+    // This means that any calls we make on the GL_ARRAY_BUFFER target will
+    // be made on the currently-bound vertex_buffer_object
+    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_object);
+    // Copy our user-defined data into the bound buffer
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    // Holds information from our buffer for drawing faster(?)
+    GLuint vertex_array_object;
+    glGenVertexArrays(1, &vertex_array_object);
+    glBindVertexArray(vertex_array_object);
+
+    // @TODO: What is happening here?
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(0);
+
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    // Compile our source code shader into the vertex shader object
+    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glCompileShader(vertexShader);
+
+    // Test that our vertex shader worked flawlessly
+    GLint success;
+    GLchar infoLog[512];
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(vertexShader, sizeof(infoLog), NULL, infoLog);
+        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n"
+                  << infoLog << std::endl;
+    }
+
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSrc, NULL);
+    glCompileShader(fragmentShader);
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(fragmentShader, sizeof(infoLog), NULL, infoLog);
+        std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n"
+                  << infoLog << std::endl;
+    }
+
+    GLuint shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+        glGetProgramInfoLog(shaderProgram, sizeof(infoLog), NULL, infoLog);
+        std::cout << "ERROR::SHADER::PROGRAM::LINKER;_FAILED\n"
+                  << infoLog << std::endl;
+    }
+
+    // We already loaded the shaders into GPU memory, so clear our program memory
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    while (!glfwWindowShouldClose(window))
+    {
+        showFPS(window);
+
+        // input
+        // -----
+        processInput(window);
+
+        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+        // -------------------------------------------------------------------------------
+        glfwPollEvents();
+
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glUseProgram(shaderProgram);
+        glBindVertexArray(vertex_array_object);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glBindVertexArray(0);
+
+        glfwSwapBuffers(window);
+    }
+
+    // glfw: terminate, clearing all previously allocated GLFW resources.
+    // ------------------------------------------------------------------
+    glDeleteProgram(shaderProgram);
+    glDeleteVertexArrays(1, &vertex_array_object);
+    glDeleteBuffers(1, &vertex_buffer_object);
+
+    glfwTerminate();
+    return 0;
+}
+
+GLFWwindow *initOpenGL()
 {
     // glfw: initialize and configure
     // ------------------------------
@@ -35,8 +158,8 @@ int main()
 #endif
 
     // glfw window creation
-    // --------------------
     GLFWwindow *window = NULL;
+    // --------------------
     if (glFullscreen)
     {
         GLFWmonitor *primaryMonitor = glfwGetPrimaryMonitor();
@@ -54,7 +177,7 @@ int main()
     {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
-        return -1;
+        return NULL;
     }
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
@@ -64,69 +187,12 @@ int main()
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cout << "Failed to initialize GLAD" << std::endl;
-        return -1;
+        return NULL;
     }
 
-    float vertices[] = {
-        -0.5f, -0.5f, 0.0f,
-        0.5f, -0.5f, 0.0f,
-        0.0f, 0.5f, 0.0f};
-    std::cout << &vertices << std::endl;
+    glClearColor(0.8f, 0.3f, 0.3f, 0.2f);
 
-    // Normally called a VBO, the vertex buffer object lets us store
-    // a lot of vertices in memory on the graphics card;
-    // It's slow to get data from the CPU -> GPU, so we want to get
-    // as much into the graphics cards at once (batching)
-    unsigned int vertex_buffer_object;
-    // Create a new buffer
-    glGenBuffers(1, &vertex_buffer_object);
-    // Bind the newly-created buffer to the GL_ARRAY_BUFFER target;
-    // This means that any calls we make on the GL_ARRAY_BUFFER target will
-    // be made on the currently-bound vertex_buffer_object
-    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_object);
-    // Copy our user-defined data into the bound buffer
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    // Compile our source code shader into the vertex shader object
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-
-    // Test that our vertex shader worked flawlessly
-    int success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-
-    if (!success)
-    {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n"
-                  << infoLog << std::endl;
-    }
-
-    // render loop
-    // -----------
-    while (!glfwWindowShouldClose(window))
-    {
-        showFPS(window);
-
-        // input
-        // -----
-        processInput(window);
-
-        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-        // -------------------------------------------------------------------------------
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-
-        glClearColor(0.8f, 0.3f, 0.3f, 0.2f);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-
-    // glfw: terminate, clearing all previously allocated GLFW resources.
-    // ------------------------------------------------------------------
-    glfwTerminate();
-    return 0;
+    return window;
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
