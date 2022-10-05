@@ -1,6 +1,5 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-
 #include <iostream>
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
@@ -55,6 +54,9 @@ int main()
         // -------------------------------------------------------------------------------
         glfwSwapBuffers(window);
         glfwPollEvents();
+
+        glClearColor(0.8f, 0.3f, 0.3f, 0.2f);
+        glClear(GL_COLOR_BUFFER_BIT);
     }
 
     // glfw: terminate, clearing all previously allocated GLFW resources.
